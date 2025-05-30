@@ -22,7 +22,7 @@ public:
     ~SkipNode() = default;
 };
 
-template<typename T,typename Compare = std::less<T>, typename Allocator = std::allocator<T>>
+template<typename T,typename Compare = std::less<>, typename Allocator = std::allocator<T>>
 class SkipList
 {
 public:
@@ -37,14 +37,102 @@ public:
     //allocator
     Allocator get_allocator() const { return _alloc;}
     //iterators 
-    class iterator;
-    class const_iterator;
-//ask if should be named cbegin cend
-//!!!begin / end - WIP 
-    iterator begin() noexcept;
-    iterator end() noexcept;
-    const_iterator cbegin() const noexcept;
-    const_iterator cend() cont noexcept;
+    class iterator
+    {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = T*;
+        using reference = T&;
+
+        iterator(SkipNode<T>* node = nullptr) : current(node) {}
+
+        reference operator*() const { return current->data; }
+        pointer operator->() const { return &current->data; }
+
+        iterator& operator++()
+        {
+            if (current)
+            {
+                current = current->right;
+            }
+            return *this;
+        }
+
+        iterator operator++(int)
+        {
+            iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const iterator& other) const { return current == other.current; }
+        bool operator!=(const iterator& other) const { return current != other.current; }
+        
+    private:
+        SkipNode<T> current;
+    };
+    //add const
+    class const_iterator
+    {
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = const T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const T*;
+        using reference = const T&;
+
+        const_iterator(const SkipNode<T>* node = nullptr) : current(node) {}
+
+        reference operator*() const { return current->data; }
+        pointer operator->() const { return &current->data; }
+
+        const_iterator& operator++()
+        {
+            if (current) current = current->right;
+            return *this;
+        }
+
+        const_iterator operator++(int)
+        {
+            const_iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const const_iterator& other) const { return current == other.current; }
+        bool operator!=(const const_iterator& other) const { return current != other.current; }
+        
+    private:
+        SkipNode<T> current;
+    };
+    iterator begin() noexcept
+    {
+        SkipNode<T>* node = head;
+        while (node->down) node = node->down;
+        return iterator(node->right);
+    };
+    iterator end() noexcept
+    {
+        SkipNode<T> node = tail;
+        while(node->down) node = node->down;
+        return iterator(node);
+    };
+    const_iterator cbegin() const noexcept
+    {
+        const SkipNode<T>* node = head;
+        while (node->down) node = node->down;
+        return const_iterator(node->right); 
+    };
+    const_iterator cend() const noexcept
+    {
+        const SkipNode<T> node = tail;
+        while(node->down) node = node->down;
+        return const_iterator(node);
+    };
+    const_iterator begin() const noexcept { return cbegin(); }
+    const_iterator end() const noexcept { return cend(); }
     // Constructor and destructor
 //!!!Constructos WIP
     explicit SkipList(const Compare& comp = Compare(), const Allocator& alloc = Allocator()) 
@@ -59,38 +147,55 @@ public:
         : _comp(other._comp),
           _alloc(other._alloc),
           current_max_level(other.current_max_level),
-          MAX_LVL(other.MAX_LVL)
+          MAX_LVL(other.MAX_LVL),
+          _size(other._size)
     {
         srand(time(nullptr));
 
-        std::vector<SkipNode<T>*> to_down;
-        SkipNode<T> other_cur_level = other.head;
-        while(other_cur_level != nullptr)
+        if (other.empty())
         {
-            SkipNode<T> other_cur_node = other_cur_level->right;
-            SkipNode<T> new_head;
-            SkipNode<T> new_tail;
-            if(other_cur_level == other.head)
-            {
-                head = new_head;
-                tail = new_tail;
-            }
-            while(other_cur_node->right != nullptr)
-            {
-                
-                if(other_cur_node->down != nullptr)
-                {
-                    to_down
-                }
-            }
+            head = new SkipNode<T>();
+            tail = new SkipNode<T>();
+            head->right = tail;
+            tail->left = head;
+        }
+        //start with creating bottom layer
+        SkipNode<T>* other_curr = other.getHeadAtLevel(1)->right;
+        SkipNode<T>* prev_new_node = head;
 
+        while (other_curr != other.getTailAtLevel(1))
+        {
+            SkipNode<T>* new_node = new SkipNode<T>(other_curr->data);
+            new_node->left = prev_new_node;
+            prev_new_node->right = new_node;
+            prev_new_node = new_node;
+            other_curr = other_curr->right;
         }
 
+        prev_new_node->right = tail;
+        tail->left = prev_new_node;
 
+        for (int lvl = 2; lvl <= current_max_level; lvl++)
+        {
+            copyLevel(other, lvl);
+        }
     };
-    SkipList(Skiplist&& other) noexcept 
-    {};
-
+    SkipList(SkipList&& other) noexcept 
+        : _comp(std::move(other._comp)),
+          _alloc(std::move(other._alloc)),
+          head(other.head),
+          tail(other.tail),
+          current_max_level(other.current_max_level),
+          MAX_LVL(other.MAX_LVL),
+          _size(other._size)
+    {
+        other.head = SkipNode<T>();
+        other.tail = SkipNode<T>();
+        other.head->right = other.tail;
+        other.tail->left = other.head;
+        other.current_max_level = 1;
+    };
+    
     ~SkipList() noexcept
     {
         SkipNode<T>* current_level = head;
@@ -109,7 +214,41 @@ public:
     SkipNode<T>* tail;
     int current_max_level = 1;
     const int MAX_LVL = 16;
+    size_t _size = 0;
 
+    SkipList& operator=(SkipList& other) noexcept
+    {
+        if (this != &other)
+        {
+            SkipList temp(other);
+            swap(*this, temp);
+        }
+        return *this;
+    }
+    SkipList& operator=(SkipList&& other) noexcept
+    {
+        clear();
+
+        head = other.head;
+        tail = other.tail;
+        current_max_level = other.current_max_level;
+        MAX_LVL = other.MAX_LVL;
+        _comp = std::move(other._comp);
+        _alloc = std::move(other._alloc);
+        _size = other._size;
+
+        other.head = SkipNode<T>();
+        other.tail = SkipNode<T>();
+        other.head->right = other.tail;
+        other.tail->left = other.head;
+        other.current_max_level = 1;
+    }
+
+    void empty() const noexcept
+    {
+        SkipNode<T>* bottom_head = getHeadAtLevel(1);
+        return bottom_head == getTailAtLevel(1);
+    }
     void insert(T idata)
     {
         int level = random_level();
@@ -154,52 +293,87 @@ public:
             new_node->down = lower_node;
             lower_node = new_node;
         }
+        ++_size;
     }
-
-    bool erase(T idata)
+    
+    template <typename K>
+    bool erase(const K& value)
     {
-        SkipNode<T>* current_node = head;
-        bool found = false;
-
-        for (int l = current_max_level; l >= 1; --l)
+        SkipNode<T>* node = findNode(value);
+        if (node)
         {
-            SkipNode<T>* current_tail = getTailAtLevel(l);
-            while (current_node->right != current_tail && current_node->right->data < idata) 
-            {
-                current_node = current_node->right;
-            }
-            if (current_node->right != current_tail && current_node->right->data == idata)
-            {
-                found = true;
-                SkipNode<T>* to_delete = current_node->right;
-                current_node->right = to_delete->right;
-                to_delete->right->left = current_node;
-                delete to_delete;
-            }
-            current_node = current_node->down;
+            eraseNode(node);
+            return true;
         }
-        return found;
+        return false;
     }
-
-    SkipNode<T>* find(T idata)
+    iterator erase(iterator pos)
     {
-        SkipNode<T>* current_node = head;
-        for (int l = current_max_level; l >= 1; --l)
-        {
-            SkipNode<T>* current_tail = getTailAtLevel(l);
-            while (current_node->right != current_tail && current_node->right->data < idata)
-            {
-                current_node = current_node->right;
-            }
-            if (current_node->right != current_tail && current_node->right->data == idata)
-            {
-                return current_node->right;
-            }
-            current_node = current_node->down;
-        }
-        return nullptr;
+        if (pos == end()) return end();
+
+        SkipNode<T>* node = pos.current;
+        ++pos;
+        eraseNode(node);
+        return pos;
+    }
+    iterator erase(const_iterator pos)
+    {
+        return earse(iterator(pos.current));
+    }
+    iterator erase(iterator itb, iteartor ite)
+
+    template <typename K>
+    iterator find(const K& key)
+    {
+        SkipNode<T>* node = findNode(key);
+        return (node) ? iterator(node) : end();
+    }
+    template <typename K>
+    const_iterator find(const K& key) const
+    {
+        const SkipNode<T>* node = findNode(key);
+        return (node) ? const_iterator(node) : cend();
+    }
+    bool contains(const T& value) const 
+    {
+        return findNode(value) != nullptr;
+    }
+  
+    size_t size()
+    {
+        return _size;
     }
 
+    friend void swap(SkipList& a, SkipList& b)
+    {
+        std::swap(a.head, b.head);
+        std::swap(a.tail, b.tail);
+        std::swap(a.current_max_level, b.current_max_level);
+        std::swap(a.MAX_LVL, b.MAX_LVL);
+        std::swap(a._comp, b._comp);
+        std::swap(a._alloc, b._alloc);
+        std::swap(a._size, b._size)
+    }
+    void clear()
+    {
+        SkipNode<T>* current_level = head;
+        while(current_level != nullptr)
+        {
+            SkipNode<T>* current_node = current_level;
+            while(current_node != nullptr)
+            {
+                SkipNode<T>* next_node = current_node->right;
+                delete current_node;
+                current_node = next_node;
+            }
+        }
+        head = new SkipNode<T>();
+        tail = new SkipNode<T>();
+        head->right = tail;
+        tail-left = head;
+        current_max_level = 1;
+        _size = 0;
+    }
 private:
     //allocator and comparator
     Allocator _alloc;
@@ -214,15 +388,118 @@ private:
         }
         return level;
     }
-    SkipNode<T>* getTailAtLevel(int level)
+    SkipNode<T>* getHeadAtLevel(int level) const
+    {
+        SkipNode<T>* current_head = head;
+        int current_level = current_max_level;
+        while ((level < current_level) && (current_head->down))
+        {
+            current_head = current_head->down;
+            current_level--;
+        }
+        return current_head;
+    }
+    SkipNode<T>* getTailAtLevel(int level) const
     {
         SkipNode<T>* current_tail = tail;
-        while (level < current_max_level)
+        int current_level = current_max_level;
+        while ((level < current_level) && (current_tail->down))
         {
             current_tail = current_tail->down;
-            level++;
+            current_level--;
         }
         return current_tail;
+    }
+    void copyLevel(const SkipNode<T>& other, int level)
+    {
+        SkipNode<T>* other_head = other.getHeadAtLevel(level);
+        SkipNode<T>* other_curr = other_head->right;
+        SkipNode<T>* new_head = new SkipNode<T>();
+        SkipNode<T>* new_tail = new SkipNode<T>();
+
+        new_head->right = tail;
+        new_tail->left = head;
+
+        new_head->down = getHeadAtLevel(level - 1);
+        new_tail->down = getTailAtLevel(level - 1);
+
+        SkipNode<T>* prev_new_node = new_head;
+        while(other_curr != other.getTailAtLevel(level))
+        {
+            SkipNode<T>* new_node = new SkipNode<T>(other_curr->data);
+            new_node->left = prev_new_node;
+            prev_new_node->right = new_node;
+            prev_new_node = new_node;
+
+            SkipNode<T>* lower_node = findLowerNode(new_node->data, level-1);
+            new_node->down = lower_node;
+
+            other_curr = other_curr->right;
+        }
+
+        prev_new_node->right = new_tail;
+        new_tail->left = prev_new_node;
+    }
+    SkipNode<T>* findLowerNode(const T& data, int level)
+    {
+        SkipNode<T>* current = getHeadAtLevel(level)->right;
+        SkipNode<T>* level_tail = getTailAtLevel(level);
+        while (current != level_tail && current->data < data)
+        {
+            current = current->right;
+        }
+        return current->left;
+    }
+    template <typename K>
+    SkipNode<T>* findNode(const K& key) const
+    {
+        SkipNode<T>* current_node = head;
+        for (int l = current_max_level; l >= 1; --l)
+        {
+            SkipNode<T>* current_tail = getTailAtLevel(l);
+            while (current_node->right != current_tail && _comp(current_node->right->data, key))
+            {
+                current_node = current_node->right;
+            }
+            if (current_node->right != current_tail && !_comp(_Deduce_key, current_node->right->data))
+            {
+                return current_node->right;
+            }
+            current_node = current_node->down;
+        }
+        return nullptr;
+    }
+    void eraseNode(SkipNode<T>* node)
+    {
+        while(node)
+        {
+            SkipNode<T>* next_level = node->down;
+
+            node->left->right = node->right;
+            node->right->left = node->left;
+
+            delte node;
+            node = next_level;
+        }
+        --_size();
+
+        trimEmptyLevels();
+    }
+    void trimEmptyLevels()
+    {
+        while(current_max_level > 1 && head->right == tail)
+        {
+            SkipNode<T>* old_head = head;
+            SkipNode<T>* old_tail = tail;
+            
+            head = head->down;
+            tail = tail->down;
+            
+            delete old_head;
+            delete old_tail;
+
+            --current_max_level;
+        }
     }
 };
 
