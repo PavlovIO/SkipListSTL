@@ -1,0 +1,66 @@
+# Что за Workflow
+name: "Build & Test"
+
+# Когда он запускается
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  build_n_test:
+    name: Настройка, сборка и тестирование
+    # Контейнер, в котором запускается задание
+
+    # Разные сочетания для проверки
+    strategy:
+      matrix:
+        os:
+          - ubuntu-24.04
+        gcc_version:
+          - 12
+        exercise:
+          - SkipListSTL
+
+    runs-on: "${{ matrix.os }}"
+
+    # Шаги задания
+    steps:
+      - name: Установка make и некоторых других инструментов
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtest-dev libgmock-dev libeigen3-dev libopenblas-dev
+
+      - name: Установка GCC
+        uses: Dup4/actions-setup-gcc@v1
+        with:
+          version: "${{ matrix.gcc_version }}"
+
+      - name: Берём исходники из Гита
+        uses: actions/checkout@v4
+
+      - name: Подмодули Git
+        run: git submodule update --init
+
+      - name: Печать окружения. Окружение — это интересно.
+        run: |
+          echo GITHUB_ENV: $GITHUB_ENV
+          echo '=================== Содержимое GITHUB_ENV ====================='
+          cat $GITHUB_ENV  
+          echo '==================== Окружение в итоге ========================'
+          env  
+
+      - name: Собираем программу
+        run: |
+          cd ${{ matrix.exercise }}
+          make build
+
+      - name: Тестируем программу
+        run: |
+          cd ${{ matrix.exercise }}
+          make runtest
+          
+          
