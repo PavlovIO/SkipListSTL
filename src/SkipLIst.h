@@ -34,6 +34,9 @@ public:
     using const_pointer = const value_type*;
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    using node_allocator = typename std::allocator_traits<Allocator>::template rebind_alloc<SkipNode<T>>;
     //allocator
     Allocator get_allocator() const { return _alloc;}
     //iterators 
@@ -71,7 +74,7 @@ public:
         bool operator!=(const iterator& other) const { return current != other.current; }
         
     private:
-        SkipNode<T> current;
+        SkipNode<T>* current;
     };
     //add const
     class const_iterator
@@ -105,7 +108,7 @@ public:
         bool operator!=(const const_iterator& other) const { return current != other.current; }
         
     private:
-        SkipNode<T> current;
+        SkipNode<T>* current;
     };
     iterator begin() noexcept
     {
@@ -115,7 +118,7 @@ public:
     };
     iterator end() noexcept
     {
-        SkipNode<T> node = tail;
+        SkipNode<T>* node = tail;
         while(node->down) node = node->down;
         return iterator(node);
     };
@@ -127,14 +130,20 @@ public:
     };
     const_iterator cend() const noexcept
     {
-        const SkipNode<T> node = tail;
+        const SkipNode<T>* node = tail;
         while(node->down) node = node->down;
         return const_iterator(node);
     };
     const_iterator begin() const noexcept { return cbegin(); }
     const_iterator end() const noexcept { return cend(); }
+    reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+    reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+    const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(cend()); }
+    const_reverse_iterator crend() const noexcept { return const_reverse_iterator(cbegin()); }
+    const_reverse_iterator rbegin() const noexcept { return crbegin(); }
+    const_reverse_iterator rend() const noexcept { return crend(); }
+    
     // Constructor and destructor
-//!!!Constructos WIP
     explicit SkipList(const Compare& comp = Compare(), const Allocator& alloc = Allocator()) 
     {
         head = new SkipNode<T>();
@@ -244,7 +253,7 @@ public:
         other.current_max_level = 1;
     }
 
-    void empty() const noexcept
+    bool empty() const noexcept
     {
         SkipNode<T>* bottom_head = getHeadAtLevel(1);
         return bottom_head == getTailAtLevel(1);
@@ -257,7 +266,7 @@ public:
 
         for (int l = current_max_level; l >= 1; --l)
         {
-            while (current_node->right != tail && current_node->right->data < idata)
+            while (current_node->right != tail && _comp(current_node->right->data, idata))
             {
                 current_node = current_node->right;
             }
@@ -295,7 +304,35 @@ public:
         }
         ++_size;
     }
+    template <typename InputIt>
+    void insert(InputIn first, InputIt last)
+    {
+        for (; first != last; ++first)
+        {
+            insert(*first);
+        }
+    }
+    template <typename... Args>
+    iterator emplace(Args&&... args)
+    {
+        T value(std::froward<Args>(args)...);
+        return insert(std::move(value)).first;
+    }
     
+    void merge(SkipList&& other)
+    {
+        for(auto it = other.begin(); it != other.end(); )
+        {
+            auto next = std::next(it);
+            if(!contains(*it))
+            {
+                insert(std::move(*it));
+                other.erase(it);
+            }
+            it = next;
+        }
+    }
+
     template <typename K>
     bool erase(const K& value)
     {
@@ -318,9 +355,20 @@ public:
     }
     iterator erase(const_iterator pos)
     {
-        return earse(iterator(pos.current));
+        return erase(iterator(pos.current));
     }
-    iterator erase(iterator itb, iteartor ite)
+    iterator erase(const_iterator first, const_iterator last)
+    {
+        if(first == begin() && last == end())
+        {
+            clear();
+        }
+        while(first != last)
+        {
+            first = erase(first);
+        }
+        return iterator(first.current);
+    }
 
     template <typename K>
     iterator find(const K& key)
@@ -338,11 +386,31 @@ public:
     {
         return findNode(value) != nullptr;
     }
-  
-    size_t size()
+    template <typename K>
+    iterator lower_bound(const K& key)
     {
-        return _size;
+        SkipNode<T>* node = head;
+
+        for(int lvl = current_max_level; lvl >= 1; --lvl)
+        {
+            SkipNode<T>* curr_tail = getTailAtLevel(lvl);
+            while(node->right != curr_tail && _comp(node->right->data, key))
+            {
+                node = node->right;
+            }
+            if(lvl > 1) node = node->down;
+        }
+        return iterator(node->right);
     }
+    template <typename K>
+    iterator upper_bound(const K& key)
+    {
+        iterator it = lower_bound(key);
+        return (it != end() && !_comp(key, *it)) ? ++it : it;
+    }
+
+
+    size_t size() const { return _size; }
 
     friend void swap(SkipList& a, SkipList& b)
     {
@@ -373,6 +441,19 @@ public:
         tail-left = head;
         current_max_level = 1;
         _size = 0;
+    }
+    bool validate() const
+    {
+        for(int lvl = 1; lvl <= current_max_level; ++lvl)
+        {
+            SkipNode<T>* node = getHeadAtLevel(lvl)->right;
+            while(node != getTailAtLevel(lvl))
+            {
+                if(_comp(node->right->data, node->data)) return false;
+                node = node->right;
+            }
+        }
+        return true;
     }
 private:
     //allocator and comparator
