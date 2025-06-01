@@ -168,31 +168,37 @@ public:
           MAX_LVL(other.MAX_LVL),
           _size(other._size)
     {
-        head = create_node(T());
-        tail = create_node(T());
-        head->right = tail;
-        tail->left = head;
-
-
-        SkipNode<T>* other_curr = other.getHeadAtLevel(1)->right;
-        SkipNode<T>* prev_new_node = head;
-
-        while (other_curr != other.getTailAtLevel(1))
+        std::vector<SkipNode<T>*> heads;
+        std::vector<SkipNode<T>*> tails;
+        
+        for(int lvl = 1; lvl <= current_max_level; ++lvl)
         {
-            SkipNode<T>* new_node = create_node(other_curr->data);
-            new_node->left = prev_new_node;
-            prev_new_node->right = new_node;
-            prev_new_node = new_node;
-            other_curr = other_curr->right;
+            SkipNode<T>* new_head = create_node(T());
+            SkipNode<T>* new_tail = create_node(T());
+            new_head->right = new_tail;            
+            new_tail->left = new_head;
+            
+            if(!heads.empty())
+            {
+                new_head->down = heads.back();
+                new_tail->down = tails.back();
+            }else
+            {
+                new_head->down = nullptr;
+                new_tail->down = nullptr;
+            }
+            heads.push_back(new_head);
+            tails.push_back(new_tail);
         }
+        
+        head = heads.back();
+        tail = tails.back();
 
-        prev_new_node->right = tail;
-        tail->left = prev_new_node;
-
-        for (int lvl = 2; lvl <= current_max_level; lvl++)
+        for(int lvl = 1; lvl <= current_max_level; ++lvl)
         {
             copyLevel(other, lvl);
         }
+        
     };
     SkipList(SkipList&& other) noexcept 
         : _alloc(std::allocator_traits<Allocator>::select_on_container_copy_construction(other._alloc)),
@@ -690,37 +696,29 @@ private:
     }
     void copyLevel(const SkipList& other, int level)
     {
-        SkipNode<T>* other_head = other.getHeadAtLevel(level);
-        SkipNode<T>* other_curr = other_head->right;
-        SkipNode<T>* new_head = create_node(T());
-        SkipNode<T>* new_tail = create_node(T());
-
-        new_head->right = new_tail;
-        new_tail->left = new_head;
-
-        new_head->down = getHeadAtLevel(level - 1);
-        new_tail->down = getTailAtLevel(level - 1);
-
-        SkipNode<T>* prev_new_node = new_head;
-        while(other_curr != other.getTailAtLevel(level))
-        {
+        SkipNode<T>* other_curr = other.getHeadAtLevel(level)->right;
+        SkipNode<T>* current = getHeadAtLevel(level);
+        
+        while (other_curr != other.getTailAtLevel(level)) {
             SkipNode<T>* new_node = create_node(other_curr->data);
-            new_node->left = prev_new_node;
-            prev_new_node->right = new_node;
-            prev_new_node = new_node;
-
-            SkipNode<T>* lower_node = findLowerNode(new_node->data, level-1);
-            new_node->down = lower_node;
-
+            
+            new_node->right = current->right;
+            new_node->left = current;
+            current->right->left = new_node;
+            current->right = new_node;
+            
+            if (level > 1) {
+                SkipNode<T>* lower_node = findLowerNode(new_node->data, level-1);
+                new_node->down = lower_node;
+            }
+            
             other_curr = other_curr->right;
+            current = current->right;
         }
-
-        prev_new_node->right = new_tail;
-        new_tail->left = prev_new_node;
     }
     SkipNode<T>* findLowerNode(const T& data, int level)
     {
-        SkipNode<T>* current = getHeadAtLevel(level);
+        SkipNode<T>* current = getHeadAtLevel(level)->right;
         
         if (!current || !current->right)
         {
@@ -729,7 +727,7 @@ private:
         }
         
         SkipNode<T>* level_tail = getTailAtLevel(level);
-        while (current && current != level_tail && current->data < data)
+        while (current && current != level_tail && _comp(current->data, data))
         {
             current = current->right;
         }
