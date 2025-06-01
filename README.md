@@ -4,7 +4,7 @@
 ## Contacts
 st129535@student.spbu.ru
 ## Description
-Header only implementation of skiplist with stl standarts
+Header only implementation of skiplist with stl standarts. Documentation in SkipList.txt
 ## Build
 make all
 ## Run example

@@ -1,0 +1,159 @@
+SkipList.h Documentation
+
+Overview
+A template-based Skip List implementation in C++ with STL-compatible interface. Skip lists are probabilistic data structures that provide O(log n) average time complexity for search, insertion, and deletion operations.
+
+Class Template Declaration
+template<
+    typename T,                     // Element type
+    typename Compare = std::less<>, // Comparison function object
+    typename Allocator = std::allocator<T> // Allocator type
+>
+class SkipList;
+
+Public Interface
+
+Types
+Type-------------------Description
+value_type-------------Type of elements (T)
+reference--------------Reference to element (T&)
+const_reference--------Const reference to element (const T&)
+iterator---------------Forward iterator
+const_iterator---------Const forward iterator
+reverse_iterator-------Reverse iterator
+const_reverse_iterator-Const reverse iterator
+size_type--------------Unsigned integer type (std::size_t)
+difference_type--------Signed integer type (std::ptrdiff_t)
+
+Constructors & Destructor
+// Default constructor
+explicit SkipList(const Compare& comp = Compare(), const Allocator& alloc = Allocator());
+// Copy constructor
+SkipList(const SkipList& other);
+// Move constructor
+SkipList(SkipList&& other) noexcept;
+// Destructor
+~SkipList() noexcept;
+
+Element Access
+Method-----------------Description
+begin(), cbegin()------Iterator to first element
+end(), cend()----------Iterator to one past last element
+rbegin(), crbegin()----Reverse iterator to last element
+rend(), crend()--------Reverse iterator to one before first
+### Capacity
+Method-----------------Description
+empty()----------------Checks if container is empty
+size()-----------------Returns number of elements
+max_size()-------------Returns maximum possible level
+
+Modifiers
+// Inserts element
+std::pair<iterator, bool> insert(const T& value);
+// Inserts element (move semantics)
+std::pair<iterator, bool> insert(T&& value);
+// Constructs element in-place
+template <typename... Args>
+iterator emplace(Args&&... args);
+// Erases element by value
+template <typename K>
+bool erase(const K& value);
+// Erases element by iterator
+iterator erase(iterator pos);
+// Erases range [first, last)
+iterator erase(const_iterator first, const_iterator last);
+// Merges another SkipList
+void merge(SkipList&& other);
+// Clears all elements
+void clear();
+
+Lookup Operators
+// Finds element with key equivalent to value
+template <typename K>
+iterator find(const K& value);
+// Checks if element exists
+bool contains(const T& value) const;
+// Returns iterator to first element not less than key
+template <typename K>
+iterator lower_bound(const K& key);
+// Returns iterator to first element greater than key
+template <typename K>
+iterator upper_bound(const K& key);
+
+Utility functions
+// Swaps contents with another SkipList
+void swap(SkipList& other) noexcept;
+// Validates structural integrity
+bool validate() const;
+// Prints specific level (debug)
+void printLevel(int level) const;
+// Prints all levels (debug)
+void printAllLevels() const;
+
+Implementation Details
+
+Internal Node Structure
+template<typename T>
+class SkipNode {
+public:
+    T data;
+    SkipNode* left;
+    SkipNode* right;
+    SkipNode* down;
+    
+    SkipNode() : data(T()), left(nullptr), right(nullptr), down(nullptr) {}
+    SkipNode(const T& indata) : data(indata), left(nullptr), right(nullptr), down(nullptr) {}
+};
+
+Key Algorithms
+Insertion:
+    Generate random level for new node
+    Find insertion points at each level
+    Create and link nodes from bottom up
+    Expand levels if needed
+Search:
+    Start at top-left (head of highest level)
+    While not at bottom level:
+        Move right while next node's value < search key
+        Move down one level
+    Check if found at bottom level
+Deletion:
+    Find node to delete
+    Remove from all levels
+    Update adjacent pointers
+    Trim empty top levels
+
+Limitation
+Memory overhead from multiple node levels
+Worst-case O(n) performance possible
+Not thread-safe (requires external synchronization)
+Fixed probability (p=0.5) for level generation
+
+Notes
+Default maximum level is 16 (configurable via MAX_LVL)
+Uses geometric distribution for level determination
+Provides full STL iterator support
+Includes comprehensive debug utilities
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
